@@ -87,7 +87,12 @@ Meteor.startup(function() {
 
   // collection holding the job history records
   SyncedCron._collection = new Mongo.Collection(options.collectionName);
-  SyncedCron._collection._ensureIndex({intendedAt: 1, name: 1});
+
+  try {
+    SyncedCron._collection._ensureIndex({intendedAt: 1, name: 1}, {unique: true});
+  } catch(err){
+    log.error('Error while esnuring index', err);
+  }
 
   if (options.collectionTTL) {
     if (options.collectionTTL > minTTL)
