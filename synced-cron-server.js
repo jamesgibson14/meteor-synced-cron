@@ -138,7 +138,12 @@ Meteor.startup(function() {
 
   // collection holding the job history records
   SyncedCron._collection = new Mongo.Collection(options.collectionName);
-  SyncedCron._collection._ensureIndex({intendedAt: 1, name: 1}, {unique: true});
+
+  try {
+    SyncedCron._collection._ensureIndex({intendedAt: 1, name: 1}, {unique: true});
+  } catch(err){
+    log.error('Error while esnuring index', err);
+  }
 
   if (options.collectionTTL) {
     if (options.collectionTTL > minTTL) {
@@ -221,7 +226,7 @@ SyncedCron.remove = function(jobName) {
       entry._timer.clear();
 
     delete this._entries[jobName];
-    log.info('Removed "' + entry.name);
+    log.info('Removed "' + entry.name + '"');
   }
 }
 
@@ -266,6 +271,9 @@ SyncedCron._entryWrapper = function(entry) {
   var self = this;
 
   return function(intendedAt) {
+    intendedAt = new Date(intendedAt.getTime());
+    intendedAt.setMilliseconds(0);
+
     var jobHistory = {
       intendedAt: intendedAt,
       name: entry.name,
@@ -290,7 +298,7 @@ SyncedCron._entryWrapper = function(entry) {
     // run and record the job
     try {
       log.info('Starting "' + entry.name + '".');
-      var output = entry.job.call(entry.context, intendedAt); // <- Run the actual job
+      var output = entry.job.call(entry.context, intendedAt, entry.name); // <- Run the actual job
 
       log.info('Finished "' + entry.name + '".');
       self._collection.update({_id: jobHistory._id}, {
@@ -299,12 +307,12 @@ SyncedCron._entryWrapper = function(entry) {
           result: output
         }
       });
-    } catch (e) {
-      log.info('Exception "' + entry.name +'" ' + e.stack);
+    } catch(e) {
+      log.info('Exception "' + entry.name +'" ' + ((e && e.stack) ? e.stack : e));
       self._collection.update({_id: jobHistory._id}, {
         $set: {
           finishedAt: new Date(),
-          error: e.stack
+          error: (e && e.stack) ? e.stack : e
         }
       });
     }
@@ -339,6 +347,14 @@ SyncedCron._laterSetInterval = function(fn, sched, timezone, scheduleOffset) {
   function scheduleTimeout(intendedAt) {
     if (!done) {
       fn(intendedAt);
+
+      try {
+        fn(intendedAt);
+      } catch(e) {
+        log.info('Exception running scheduled job ' + ((e && e.stack) ? e.stack : e));
+      }
+
+
       t = SyncedCron._laterSetTimeout(scheduleTimeout, sched, timezone, scheduleOffset);
     }
   }
@@ -377,6 +393,7 @@ SyncedCron._laterSetTimeout = function(fn, sched, timezone, scheduleOffset) {
     var now = Date.now() - scheduleOffset,
         next = s.next(2, now),
         diff = next[0].getTime() - now,
+
         intendedAt = next[0];
 
     // minimum time to fire is one second, use next occurrence instead
