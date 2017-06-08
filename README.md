@@ -5,7 +5,7 @@ A fork of [percolate:synced-cron](https://atmospherejs.com/percolate/synced-cron
 ## Installation
 
 ``` sh
-$ meteor add saucecode:timezoned-synced-cron
+$ meteor add jamesgibson14:timezoned-synced-cron
 ```
 
 ## API
